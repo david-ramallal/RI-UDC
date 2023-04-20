@@ -11,6 +11,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class TopTermsInDocs {
     public static void main(String[] args) {
@@ -98,7 +99,7 @@ public class TopTermsInDocs {
 
     private static void printTopTerms(IndexReader reader, Map<String, Integer> tfs, Map<String, Float> idfs, int n, BufferedWriter bufferedWriter) throws IOException{  /* Call for a single docID */
         Map<String, Float> tfidfs = new HashMap<>();
-        ArrayList<Float> sorted_tfidf_values = new ArrayList<>();
+        List<Float> sorted_tfidf_values = new ArrayList<>();
         //ArrayList<String> sorted_terms = new ArrayList<>();
         Queue<String> sorted_terms = new LinkedList<>();
 
@@ -111,6 +112,9 @@ public class TopTermsInDocs {
 
         //Obtenemos los n valores con los mayores tfidf
         sorted_tfidf_values.sort(Collections.reverseOrder());
+        sorted_tfidf_values = sorted_tfidf_values.stream()
+                .distinct()
+                .collect(Collectors.toList());
         int i = 0;
 
         for (Float tfidf : sorted_tfidf_values){
