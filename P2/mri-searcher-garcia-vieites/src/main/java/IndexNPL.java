@@ -1,6 +1,7 @@
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.core.KeywordAnalyzer;
 import org.apache.lucene.analysis.core.SimpleAnalyzer;
+import org.apache.lucene.analysis.core.StopAnalyzer;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.analysis.es.SpanishAnalyzer;
@@ -27,7 +28,8 @@ public class IndexNPL {
                 "java org.dgrpvp.IndexNPL"
                         + " [-openmode [append | create | create_or_append]]"
                         + " [-index INDEX_PATH] [-docs DOCS_PATH]"
-                        + " [-indexingmodel [jm lambda | dir mu] ] [-analyzer ANALYZER]\n\n"
+                        + " [-indexingmodel [jm lambda | dir mu] ] [-analyzer ANALYZER]"
+                        + " [-stopwords file]\n\n"
                         + "This indexes the documents in DOCS_PATH, creating a Lucene index"
                         + "in INDEX_PATH that can be searched with SearchFiles\n"
                 ;
@@ -36,6 +38,7 @@ public class IndexNPL {
         String openmode = null;
         String indexingModel = null;
         String analyzer = null;
+        String stopWords = null;
         Float param = null;
 
         for (int i = 0; i < args.length; i++) {
@@ -48,6 +51,7 @@ public class IndexNPL {
                     param = Float.parseFloat(args[++i]);
                 }
                 case "-analyzer" -> analyzer = args[++i];
+                case "-stopwords" -> stopWords = args[++i];
                 default -> throw new IllegalArgumentException("unknown parameter " + args[i]);
             }
         }
@@ -59,14 +63,23 @@ public class IndexNPL {
             System.exit(1);
         }
 
-        final Path docDir = Paths.get(docsPath);
-        if (!Files.isReadable(docDir)) {
+        if(analyzer.equals("StopAnalyzer") && stopWords == null){
+            System.err.println("Usage: " + usage);
+            System.exit(1);
+        }
+
+        final Path collectionDir = Paths.get(docsPath);
+        if (!Files.isReadable(collectionDir)) {
             System.out.println(
                     "Document directory '"
-                            + docDir.toAbsolutePath()
+                            + collectionDir.toAbsolutePath()
                             + "' does not exist or is not readable, please check the path");
             System.exit(1);
         }
+
+
+        /* Parse the documents of the collection */
+        Map<Integer,String> docs = ParseNPL.parseCollection(docsPath);
 
         /* Configure the IndexWriter with given parameters */
         Analyzer myAnalyzer = switch (analyzer) {
@@ -76,9 +89,10 @@ public class IndexNPL {
             case "StandardAnalyzer" -> new StandardAnalyzer();
             case "EnglishAnalyzer" -> new EnglishAnalyzer();
             case "SpanishAnalyzer" -> new SpanishAnalyzer();
+            case "StopAnalyzer" -> new StopAnalyzer(Path.of(stopWords));
             default -> throw new IllegalArgumentException("Analyzer must be one of the following: \n" +
                     "WhitespaceAnalyzer, SimpleAnalyzer, KeywordAnalyzer, StandardAnalyzer\n" +
-                    "EnglishAnalyzer, SpanishAnalyzer");
+                    "EnglishAnalyzer, SpanishAnalyzer, StopAnalyzer");
         };
 
         IndexWriterConfig iwc = new IndexWriterConfig(myAnalyzer);
@@ -93,7 +107,7 @@ public class IndexNPL {
         switch (indexingModel) {
             case "jm" -> iwc.setSimilarity(new LMJelinekMercerSimilarity(param));
             case "dir" -> iwc.setSimilarity(new LMDirichletSimilarity(param));
-            default -> throw new IllegalArgumentException("indexing model " + openmode + "is not valid.\n" + usage);
+            default -> throw new IllegalArgumentException("indexing model " + indexingModel + "is not valid.\n" + usage);
         }
 
 
@@ -104,15 +118,8 @@ public class IndexNPL {
             System.out.println("Indexing to directory '" + indexPath + "'...");
 
             try(IndexWriter indexWriter = new IndexWriter(dir, iwc)){
-                IndexingFunctions.indexDocs(indexWriter, docDir);
-            };
-
-            /* Crear los fields numDoc y Contents (indexados y almacenados)
-            *
-            * Preguntar si parseamos los documentos antes o hay que hacerlo en la práctica
-            * ("se puede suponer un sólo archivo que contiene los documentos NPL")
-            *
-            * e indexar todos los documentos     */
+                IndexingFunctions.indexDocs(indexWriter, docs);
+            }
 
             Date end = new Date();
             try (IndexReader reader = DirectoryReader.open(dir)) {
